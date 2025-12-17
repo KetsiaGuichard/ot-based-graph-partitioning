@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*$py.class
+source/
+
+# Virtual environments
+.env/
+.venv/
+venv/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# data
+data/
+
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
