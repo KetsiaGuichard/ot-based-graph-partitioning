@@ -24,8 +24,9 @@ This repository implements simulation and clustering methods based on semi-relax
 - Python 3.8+ recommended.
 - Install dependencies (in a virtual environment):
 
+```
   python -m venv .venv
   source .venv/bin/activate
   pip install -r requirements.txt
-
+```
 Notable dependencies: numpy, scipy, pandas, scikit-learn, networkx, matplotlib, seaborn, POT (`ot`), dtaidistance, dtw.
