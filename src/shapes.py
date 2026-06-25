@@ -7,11 +7,11 @@ import numpy as np
 
 def normalize_symmetric(mixing_matrix):
     """Normalize and symmetrize a matrix"""
-    normalized_mixing_matrix = mixing_matrix / mixing_matrix.sum(axis=0)
-    symmetric_mixing_matrix = (
-        normalized_mixing_matrix + normalized_mixing_matrix.T
-    ) / 2
-    return symmetric_mixing_matrix
+    symmetric_mixing_matrix = (mixing_matrix + mixing_matrix.T) / 2
+    normalized_mixing_matrix = symmetric_mixing_matrix / symmetric_mixing_matrix.sum(
+        axis=0
+    )
+    return normalized_mixing_matrix
 
 
 def check_connectivity(probability_matrix):
@@ -54,13 +54,13 @@ class MixingMatrix:
         """Define the mixing matrix for SBM
 
         Args:
-            mixing_matrix(np.array(float)): mixing matrix (k,k) for SBM. 
+            mixing_matrix(np.array(float)): mixing matrix (k,k) for SBM.
                 Default to use structure strength.
             models (matrix): list of random weights to be used
-            inter_groups (float, optional): the greater, the stronger 
+            inter_groups (float, optional): the greater, the stronger
                 could be the inter-class structure.
             zero_ratio (float, optional): proportion of zeros in the matrix, used in sparse case
-            type_graph (string, optional): type of mixing matrix. 
+            type_graph (string, optional): type of mixing matrix.
                 Could be "ref", "sparse", "chain", "star" or "donut".
 
         Returns:
@@ -194,3 +194,142 @@ class MixingMatrix:
         np.fill_diagonal(matrix, self.structure_strength)
 
         return normalize_symmetric(matrix)
+
+
+class MixingMatrixInOut:
+    """Define mixing matrix and check connectivity
+
+    Args:
+        mixing_matrix (matrix): matrix if already defined
+        k (int): number of group
+        p_in (float): probability of a link between two nodes of the same group.
+        p_out (float): probability of a link between two nodes of different groups.
+    """
+
+    def __init__(self, mixing_matrix, k, p_in, p_out):
+        self.k = k
+        self.p_in = p_in
+        self.p_out = p_out
+        self.mixing_matrix = mixing_matrix
+
+    def define_mixing_matrix(self, models=None, zero_ratio=0.3, type_graph="ref"):
+        """Define the mixing matrix for SBM
+
+        Args:
+            mixing_matrix(np.array(float)): mixing matrix (k,k) for SBM.
+                Default to use structure strength.
+            models (matrix): list of random weights to be used
+            zero_ratio (float, optional): proportion of zeros in the matrix, used in sparse case
+            type_graph (string, optional): type of mixing matrix.
+                Could be "ref", "sparse", "chain", "star" or "donut".
+
+        Returns:
+            np.array: symmetric probability matrix
+        """
+        if len(self.mixing_matrix) > 0:
+            matrix = self.mixing_matrix
+        else:
+            if models is None:
+                models = []
+            connectivity = False
+            while connectivity is False:
+                match type_graph:
+                    case "ref":
+                        matrix = self.define_mixing_matrix_ref(models)
+                    case "sparse":
+                        matrix = self.define_mixing_matrix_sparse(zero_ratio)
+                    case "chain":
+                        matrix = self.define_mixing_matrix_chain()
+                    case "star":
+                        matrix = self.define_mixing_matrix_star()
+                    case "donut":
+                        matrix = self.define_mixing_matrix_donut()
+                connectivity = check_connectivity(matrix)
+        return matrix
+
+    def define_mixing_matrix_ref(self, models):
+        """Define the mixing matrix for SBM
+
+        Args:
+            models (matrix): list of random weights to be used.
+
+        Returns:
+            np.array: symmetric probability matrix
+        """
+        if len(models) > 0:
+            mixing_matrix = models
+        else:
+            mixing_matrix = (
+                np.eye(self.k) * self.p_in + (1 - np.eye(self.k)) * self.p_out
+            )
+        return mixing_matrix
+
+    def define_mixing_matrix_chain(self):
+        """Define the mixing matrix for SBM with a chain format
+        Group k is linked with and only with k-1 and k+1
+
+        Returns:
+            np.array: symmetric probability matrix
+        """
+        mixing_matrix = (
+            np.diag([self.p_in] * self.k)
+            + np.diag([self.p_out] * (self.k - 1), k=1)
+            + np.diag([self.p_out] * (self.k - 1), k=-1)
+        )
+        return mixing_matrix
+
+    def define_mixing_matrix_star(self):
+        """Define the mixing matrix for SBM with a star format
+        Group k is linked with and only with group 1
+
+        Returns:
+            np.array: symmetric probability matrix
+        """
+        mixing_matrix = np.zeros((self.k, self.k))
+        mixing_matrix[0, 1:] = self.p_out
+        mixing_matrix[1:, 0] = self.p_out
+        np.fill_diagonal(mixing_matrix, self.p_in)
+        return mixing_matrix
+
+    def define_mixing_matrix_donut(self):
+        """Define the mixing matrix for SBM with a donut format
+        Group k is linked with and only with k-1 and k+1
+        Group 1 is also linked with final group k
+
+        Returns:
+            np.array: symmetric probability matrix
+        """
+        mixing_matrix = np.zeros((self.k, self.k))
+        for i in range(self.k):
+            mixing_matrix[i, i] = self.p_in
+            mixing_matrix[i, (i - 1) % self.k] = self.p_out
+            mixing_matrix[i, (i + 1) % self.k] = self.p_out
+        return mixing_matrix
+
+    def define_mixing_matrix_sparse(self, zero_ratio=0.3):
+        """Define the mixing matrix for SBM without a specific shape
+        but also without full connectivity
+
+        Args:
+            zero_ratio (float, optional): proportion of zeros.
+
+        Returns:
+            np.array: symmetric probability matrix to be normalized
+        """
+        # Get indices of the upper triangular side
+        triu_indices = np.triu_indices(self.k, k=1)  # k=1 to exclude diagonal
+        idx_ct = len(triu_indices[0])
+        zeros_ct = int(zero_ratio * idx_ct)
+        values = np.full(idx_ct, self.p_out)
+
+        # Random zeros
+        zero_positions = np.random.choice(idx_ct, size=zeros_ct, replace=False)
+        values[zero_positions] = 0.0
+
+        # Matrix generation
+        mixing_matrix = np.zeros((self.k, self.k))
+        mixing_matrix[triu_indices] = values
+        mixing_matrix = mixing_matrix + mixing_matrix.T
+        np.fill_diagonal(mixing_matrix, self.p_in)
+
+        return mixing_matrix

@@ -13,12 +13,12 @@ def generate_proportions(alpha1_range, alpha2_range, step):
     Generate all combinations of proportions (alpha1, alpha2, alpha3)
     such that alpha1 + alpha2 + alpha3 = 1 and
     alpha1 in alpha1_range, alpha2 in alpha2_range, alpha3 >= alpha2
-    
+
     Args:
         alpha1_range (tuple): (min, max) range for alpha1
         alpha2_range (tuple): (min, max) range for alpha2
         step (float): step size for generating values within the ranges
-    
+
     Returns:
         list of list: list of [alpha1, alpha2, alpha3] combinations"""
     alpha1_values = np.arange(alpha1_range[0], alpha1_range[1], step)
@@ -39,7 +39,7 @@ def prop_to_ct(nodes_ct, prop_group):
     Args:
         nodes_ct (int): number of nodes
         prop_group (list(float)): list of proportions per group
-    
+
     Returns:
         list(int): Number of nodes per group
     """
@@ -58,13 +58,13 @@ def ct_group_alpha(
 ):
     """Get different number of nodes per group
     (How to divise n in 3 groups according to different proportions)
-    
+
     Args:
         nodes_ct (int): number of nodes
         alpha1_range (tuple, optional): range for proportion of group 1. Defaults to (0.1, 1/3).
         alpha2_range (tuple, optional): range for proportion of group 2. Defaults to (0.1, 1/3).
         step (float, optional): step size for generating proportions. Defaults to 0.1.
-    
+
     Returns:
         list(list(int)): List of different numbers of nodes per group"""
     repartition_list = generate_proportions(alpha1_range, alpha2_range, step)
@@ -101,3 +101,19 @@ def ct_group_alt(groups, alterate=None):
     if alterate == "aggregative":
         return np.concatenate(([np.sum(groups[:2])], groups[2:]))
     return groups
+
+
+def true_median_c(distance_matrix, labels):
+    """
+    Compute median shortest path length between class
+    """
+    k = len(set(labels))
+    median_c2 = np.zeros((k, k))
+    for i in range(k - 1):
+        idx_i = np.where(labels == i)[0]
+        for j in range(i + 1, k):
+            idx_j = np.where(labels == j)[0]
+            median_c2[i, j] = median_c2[j, i] = np.median(
+                distance_matrix[np.ix_(idx_i, idx_j)]
+            )
+    return median_c2

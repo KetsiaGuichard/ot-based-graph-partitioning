@@ -28,7 +28,7 @@ class MethodEvaluation:
 
         Args:
             labels (np.ndarray): array of labels (length: n_samples)
-        
+
         Returns:
             np.ndarray: transportation plan (shape: n_samples x n_classes)
         """
@@ -37,11 +37,11 @@ class MethodEvaluation:
 
     def compute_c2(self, c2, ot):
         """Adapt target matrix size to ot size by removing empty classes if needed
-        
+
         Args:
             c2 (np.ndarray): target matrix of shape (k, k)
             ot (np.ndarray): transport plan of shape (n, k)
-        
+
         Returns:
             np.ndarray: adapted target matrix of shape (k', k')
         """
@@ -54,7 +54,7 @@ class MethodEvaluation:
     def compute_fgw_loss(self, c1, m_ab):
         """
         Compute FGW loss for given source matrices and source attributes
-        
+
         Args:
             c1 (np.ndarray): source structural distance matrix (shape: n, n)
             m_ab (np.ndarray): source attribute distance matrix (shape: n, n)
@@ -64,11 +64,11 @@ class MethodEvaluation:
     def get_df_shape(self, method_name, true_c2):
         """
         Get evaluation dataframe for non-attributed graph
-        
+
         Args:
             method_name (str): name of the method
             true_c2 (np.ndarray): true target matrix (shape: k, k)
-        
+
         Returns:
             pd.DataFrame: dataframe with loss metrics
         """
@@ -86,11 +86,11 @@ class MethodEvaluation:
     def get_df_attributed(self, method_name, m_ab):
         """
         Get evaluation dataframe for attributed graph
-        
+
         Args:
             method_name (str): name of the method
             m_ab (np.ndarray): source attribute distance matrix (shape: n, n)
-        
+
         Returns:
             pd.DataFrame: dataframe with loss metrics
         """
@@ -107,7 +107,7 @@ class MethodEvaluation:
 
 class InternalEvaluation:
     """Internal metrics: modularity and silhouette (precomputed distance matrix).
-    
+
     Args:
         graph (nx.Graph): input graph
         predicted_labels (list(int)): predicted labels for each node
@@ -154,11 +154,11 @@ class InternalEvaluation:
 
 class ExternalEvaluation:
     """External metric: ARI
-    
+
     Args:
         true_labels (list(int)): ground truth labels
         predicted_labels (list(int)): predicted labels
-    
+
     Returns:
         pd.DataFrame: dataframe with ARI metric
     """

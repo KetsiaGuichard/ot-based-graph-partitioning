@@ -4,6 +4,7 @@ Simulation helpers to build geometric and stochastic-block-model graphs with att
 This module provides small classes used to create toy graphs for experiments:
 """
 
+import random
 import itertools
 import networkx as nx
 import numpy as np
@@ -15,18 +16,20 @@ from src.distances import (
     distance_functions_dtwai,
     distance_histograms_fast,
 )
-from src.shapes import MixingMatrix
+from src.shapes import MixingMatrixInOut
 from src.simulation.attributes import SimulatedFunctionalData, SimulatedHistograms
+from .utils import true_median_c
 
 
 class SimulatedGeometricGraph:
     """Create a simulated geometric graph
-    
+
     Args:
         k_group_ct (list(int)): number of nodes per class.
         means (list(tuple)): list of means for each class (2D points).
         stds (list(int)): list of standard deviations for each class.
     """
+
     def __init__(
         self,
         k_group_ct,
@@ -43,11 +46,11 @@ class SimulatedGeometricGraph:
     def connect_graph(self, graph, distance_matrix):
         """
         Ensure that the graph is connected by adding edges between components.
-        
+
         Args:
             graph (nx.Graph): The input graph which may be disconnected.
             distance_matrix (np.ndarray): The distance matrix used to find closest nodes.
-        
+
         Returns:
             nx.Graph: A connected graph.
         """
@@ -77,10 +80,10 @@ class SimulatedGeometricGraph:
     def create_graph(self, radius):
         """
         Create geometric graph based on a distance threshold (radius).
-        
+
         Args:
             radius (float): Distance threshold for connecting nodes.
-        
+
         Returns:
             nx.Graph: The created geometric graph.
         """
@@ -104,11 +107,11 @@ class SimulatedGeometricGraph:
     def scatter(self, means: list[tuple], stds: list[int]):
         """
         Scatter points according to Gaussian distributions for each class.
-        
+
         Args:
             means (list(tuple)): list of means for each class (2D points).
             stds (list(int)): list of standard deviations for each class.
-        
+
         Returns:
             np.ndarray: x coordinates of points.
             np.ndarray: y coordinates of points.
@@ -129,27 +132,27 @@ class SimulatedGraph:
 
     Args:
         groups (list(int)): number of nodes per class.
+        p_in(float): probability of connexion between nodes of same group
+        p_out(float): probability of connexion between nodes of different groups
         type_graph(str, optional): "ref", "chain", "star", "donut"
-        structure_strength (float, optional): the greater, 
-            the stronger is the intra-class structure. Default 2.
-        mixing_matrix(np.array(float), optional): mixing matrix (k,k) for SBM. 
+        mixing_matrix(np.array(float), optional): mixing matrix (k,k) for SBM.
             Default to use structure strength.
     """
 
     def __init__(
         self,
         groups,
+        p_in: float,
+        p_out: float,
         type_graph: str = "ref",
-        structure_strength: float = 2,
         mixing_matrix=np.array([]),
     ):
         self.k = len(groups)
-        self.structure_strength = structure_strength
+        self.p_in = p_in
+        self.p_out = p_out
         self.groups = groups
-        self.mixing_matrix = self.create_mixing_matrix(
-            mixing_matrix, structure_strength, type_graph
-        )
-        self.graph = self.create_graph()
+        self.mixing_matrix = self.create_mixing_matrix(mixing_matrix, type_graph)
+        self.graph = self.create_graph(type_graph)
         self.graph_model = self.__get_graph_base()
 
     def __get_graph_base(self):
@@ -162,15 +165,83 @@ class SimulatedGraph:
         random_weights = np.round(np.random.uniform(0, 0.15, (self.k, self.k)), 2)
         return random_weights
 
-    def create_mixing_matrix(self, mixing_matrix, structure_strength, type_graph):
+    def correct_donut(self, G):
+        """
+        Add edges to ensure donut shape
+        """
+        partition = G.graph["partition"]
+        group = [None] * G.number_of_nodes()
+        for i, block in enumerate(partition):
+            for node in block:
+                group[node] = i
+        A = nx.to_numpy_array(G)
+        block_adj = np.zeros((self.k, self.k), dtype=bool)
+
+        for i in range(self.k):
+            nodes_i = np.where(self.groups == i)[0]
+            for j in range(i + 1, self.k):
+                nodes_j = np.where(self.groups == j)[0]
+                if A[np.ix_(nodes_i, nodes_j)].any():
+                    block_adj[i, j] = True
+                    block_adj[j, i] = True
+
+        for i in range(self.k):
+            j = (i + 1) % self.k
+            if not block_adj[i, j]:
+                u = random.choice(tuple(partition[i]))
+                v = random.choice(tuple(partition[j]))
+                G.add_edge(u, v)
+                block_adj[i, j] = True
+                block_adj[j, i] = True
+        return G
+
+    def correct_connectivity(self, G):
+        """
+        Add edges to avoid non connex graphs
+        """
+        partition = G.graph["partition"]
+
+        for nodes in partition:
+            components = []
+            nodes_set = set(nodes)
+
+            while nodes_set:
+                start = nodes_set.pop()
+                stack = [start]
+                comp = {start}
+
+                while stack:
+                    u = stack.pop()
+                    for v in G[u]:
+                        if v in nodes_set:
+                            nodes_set.remove(v)
+                            stack.append(v)
+                            comp.add(v)
+
+                components.append(comp)
+
+            main = list(components[0])
+
+            for comp in components[1:]:
+                u = random.choice(main)
+                v = random.choice(list(comp))
+                G.add_edge(u, v)
+                main.extend(comp)
+
+        return G
+
+    def create_mixing_matrix(self, mixing_matrix, type_graph):
         """
         Generate mixing matrix
         """
-        mix = MixingMatrix(mixing_matrix, self.k, structure_strength)
+        mix = MixingMatrixInOut(mixing_matrix, self.k, self.p_in, self.p_out)
         return mix.define_mixing_matrix(type_graph=type_graph)
 
-    def create_graph(self):
+    def create_graph(self, type_graph):
         """Create networkx graph and give it some colors for visualisation
+
+        Args:
+            type_graph(str, optional): "ref", "chain", "star", "donut"
 
         Returns:
             Networkx Object: graph with colors associated with nodes
@@ -181,6 +252,10 @@ class SimulatedGraph:
                 self.groups.tolist(), self.mixing_matrix.tolist()
             )
             non_connected = not nx.is_connected(graph)
+            if not non_connected:
+                graph = self.correct_connectivity(graph)
+                if type_graph == "donut":
+                    graph = self.correct_donut(graph)
 
         colors = sns.color_palette("Set2", self.k)
         for i, (block_start, block_size) in enumerate(
@@ -212,12 +287,12 @@ class SimulatedGraph:
         """
         return np.repeat(np.arange(len(self.groups)), self.groups)
 
-    def test_structure_force(self, structure_force: list, type_graph="ref", fixed=True):
+    def test_structure_force(self, p_out_list, type_graph="ref", fixed=True):
         """
         Create several graph distance matrices
 
         Args:
-            structure_force (list(float)): parameters to be tested
+            p_out_list (list(float)): parameters to be tested
             type_graph (str, optional): "ref", "chain", "star" or "donut". Default to "ref".
             fixed (boolean, optional): should the seed be the same at each iteration?
                 Default to True
@@ -227,27 +302,33 @@ class SimulatedGraph:
             list(array): mixing matrices
         """
         k = self.get_k()
-        list_distances_graph = list([])
+        list_r1 = list([])
         list_mixing_matrix = list([])
-        for structure in structure_force:
+        list_c_target = list([])
+        for p_out in p_out_list:
             if fixed:
                 models = self.graph_model
             else:
                 models = None
-            mix = MixingMatrix(mixing_matrix=[], k=k, structure_strength=structure)
+            mix = MixingMatrixInOut(mixing_matrix=[], k=k, p_in=self.p_in, p_out=p_out)
             mixing_matrix = mix.define_mixing_matrix(
                 models=models, type_graph=type_graph
             )
             graph = SimulatedGraph(
                 groups=self.groups,
                 type_graph=type_graph,
-                structure_strength=structure,
+                p_in=None,
+                p_out=None,
                 mixing_matrix=mixing_matrix,
-            ).graph
-            tmp_dist = distance_graph(graph)
-            list_distances_graph.append(tmp_dist)
+            )
+            tmp_dist = distance_graph(graph.graph)
+            tmp_adj = nx.to_numpy_array(graph.graph)
+            tmp_c_target = true_median_c(tmp_dist, graph.get_true_labels())
+            r1 = {"distance": tmp_dist, "adjacency": tmp_adj}
+            list_r1.append(r1)
             list_mixing_matrix.append(mixing_matrix)
-        return list_distances_graph, list_mixing_matrix
+            list_c_target.append(tmp_c_target)
+        return list_r1, list_mixing_matrix, list_c_target
 
     def plot(self, ax=None):
         """Plot simulated graph"""
@@ -267,9 +348,10 @@ class SimulatedAttributedGraph:
         equilibre (int, optional): the greater, the less pronounced the imbalance
     """
 
-    def __init__(self, k: int, groups: np.array = None):
+    def __init__(self, k: int, p_in: float, groups: np.array = None):
         self.k = k
         self.groups = groups
+        self.p_in = p_in
         self.graph_model = self.__get_graph_base()
 
     def get_n(self):
@@ -301,12 +383,12 @@ class SimulatedAttributedGraph:
         labels_base = self.groups
         return np.repeat(np.arange(len(labels_base)), labels_base)
 
-    def test_structure_force(self, structure_force: list, type_graph="ref", fixed=True):
+    def test_structure_force(self, p_out_list: list, type_graph="ref", fixed=True):
         """
         Create several graph distance matrices
 
         Args:
-            structure_force (list(float)): parameters to be tested
+            p_out_list (list(float)): parameters to be tested
             type_graph (str, optional): "ref", "chain", "star" or "donut". Default to "ref".
             fixed (boolean, optional): should the seed be the same at each iteration?
                 Default to True
@@ -315,27 +397,33 @@ class SimulatedAttributedGraph:
             list(array): matrices of distance
             list(array): mixing matrices
         """
-        list_distances_graph = list([])
+        list_R1 = list([])
         list_mixing_matrix = list([])
-        for structure in structure_force:
+        for p_out in p_out_list:
             if fixed:
                 models = self.graph_model
             else:
                 models = None
-            mix = MixingMatrix(mixing_matrix=[], k=self.k, structure_strength=structure)
+            mix = MixingMatrixInOut(
+                mixing_matrix=[], k=self.k, p_in=self.p_in, p_out=p_out
+            )
             mixing_matrix = mix.define_mixing_matrix(
                 models=models, type_graph=type_graph
             )
             graph = SimulatedGraph(
                 groups=self.groups,
                 type_graph=type_graph,
-                structure_strength=structure,
+                p_in=None,
+                p_out=None,
                 mixing_matrix=mixing_matrix,
             ).graph
+
             tmp_dist = distance_graph(graph)
-            list_distances_graph.append(tmp_dist)
+            tmp_adj = nx.to_numpy_array(graph)
+            R1 = {"distance": tmp_dist, "adjacency": tmp_adj}
+            list_R1.append(R1)
             list_mixing_matrix.append(mixing_matrix)
-        return list_distances_graph, list_mixing_matrix
+        return list_R1, list_mixing_matrix
 
     def test_epsilon(self, epsilon_list: list):
         """

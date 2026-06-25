@@ -34,24 +34,17 @@ def prediction_to_partition(labels: np.ndarray) -> list:
 
 
 def eval_df(
-    evaluation_table: pd.DataFrame, parameters: pd.DataFrame, infos: dict
+    evaluation_table: pd.DataFrame, parameters: dict, infos: dict
 ) -> pd.DataFrame:
     """Concatenate parameter/info columns to an evaluation table.
 
     Returns a new dataframe containing parameters (repeated), the evaluation
     table and additional infos (repeated) side-by-side.
     """
-    tmp_parameters = pd.concat([parameters] * len(evaluation_table), ignore_index=True)
-    tmp_infos = pd.DataFrame([infos] * len(evaluation_table))
-    evaluation_table = pd.concat(
-        [
-            tmp_parameters,
-            evaluation_table.reset_index(drop=True),
-            tmp_infos.reset_index(drop=True),
-        ],
-        axis=1,
-    )
-    return evaluation_table
+    df = evaluation_table.reset_index(drop=True)
+    for col, val in {**parameters, **infos}.items():
+        df[col] = val
+    return df
 
 
 def full_matrix(matrix, indices, size):
@@ -90,11 +83,11 @@ def distance_mixing(sbm_matrix):
 
 def true_c(distance_matrix, labels):
     """Compute "true" target matrix from distance matrix and labels
-    
+
     Args:
         distance_matrix (np.ndarray): precomputed distance matrix (shape: n_samples x n_samples)
         labels (list(int)): ground truth labels
-    
+
     Returns:
         np.ndarray: kxk matrix with average distances between classes
     """
@@ -168,9 +161,35 @@ def fgw_loss(c1, c2, ot, m_ab, alpha=0.5):
         m_ab (np.array(n,k)): Attributes distance matrix between features across domains
         alpha (float, optional): Default to 0.5. Tradeoff between attributes and structure.
 
-        Returns:
+    Returns:
             float: FGW loss
     """
     gwl = gw_loss(c1, c2, ot)
     fl = np.sum(m_ab * ot)
     return alpha * gwl + (1 - alpha) * fl
+
+
+def heat_kernel(L, t):
+    """
+    Compute heat kernel of laplacian
+
+    Args:
+        L (np.array(n,n)): Laplacian Matrix
+        t (np.array(k,k)): parameter of heat kernel
+    """
+    lam, phi = np.linalg.eigh(L)
+    return np.matmul(phi, np.matmul(np.diag(np.exp(-t * lam)), phi.T))
+
+
+def modularity_numpy_fast(A, labels):
+    """
+    Compute Modularity
+    """
+    A = np.array(A)
+    labels = np.array(labels)
+    m = A.sum() / 2
+    k = A.sum(axis=1)
+    B = A - np.outer(k, k) / (2 * m)
+    same_comm = labels[:, None] == labels[None, :]
+    Q = (B * same_comm).sum()
+    return Q / (2 * m)

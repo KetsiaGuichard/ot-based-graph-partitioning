@@ -11,6 +11,47 @@ from scipy.interpolate import BSpline
 from scipy.stats import dirichlet
 
 
+def generate_block_distance_matrix(
+    groups,
+    template,
+    mu_intra=0.1,
+    sigma_intra=0.02,
+    mu_inter=0.5,
+    sigma_inter=0.1,
+    random_state=None,
+):
+    """
+    Generate dissimilarity matrices according to a template
+    
+    Args:
+        groups (np.ndarray): number of individuals per class
+        template (np.ndarray): adjacency matrix between groups
+    """
+    rng = np.random.default_rng(random_state)
+    n = groups.sum()
+    labels = np.concatenate([np.full(size, i) for i, size in enumerate(groups)])
+    D = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i + 1, n):
+            gi, gj = labels[i], labels[j]
+            if gi == gj:
+                mu = mu_intra
+                sigma = sigma_intra
+            else:
+                if template[gi, gj] > 0:
+                    mu = (mu_intra + mu_inter) / 2
+                    sigma = (sigma_intra + sigma_inter) / 2
+                else:
+                    mu = mu_inter
+                    sigma = sigma_inter
+
+            val = max(rng.normal(mu, sigma), 0)
+            D[i, j] = val
+            D[j, i] = val
+    np.fill_diagonal(D, 0)
+    return D / D.max()
+
+
 class SimulatedFunctionalData:
     """Create Functional Data with a structure
 
@@ -138,7 +179,7 @@ class SimulatedFunctionalData:
         g.map(sns.lineplot, "x", "y")
         g.set_axis_labels("x", "y")
         g.set_titles(row_template="Version {row_name}", col_template="Group {col_name}")
-        g.set(ylim=(0, 1))
+        g.set(ylim=(0, 1))  # Fixe les limites de l'axe Y
         g.tight_layout()
         g.add_legend()
         plt.show()
