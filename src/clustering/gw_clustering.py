@@ -9,7 +9,6 @@ from abc import ABC, abstractmethod
 import warnings
 from ot import gromov
 import numpy as np
-import networkx as nx
 from scipy.spatial.distance import cdist
 
 from src.clustering.utils import (
@@ -33,7 +32,16 @@ class GWClustering(ABC):
         g0 (np.ndarray or str, optional): Initial transport plan or initialization method.
     """
 
-    def __init__(self, n, k: int, weights=None, g0="kmeans"):
+    def __init__(
+        self,
+        n,
+        k: int,
+        target_c=None,
+        value=1,
+        target_type="distance",
+        weights=None,
+        g0="kmeans",
+    ):
         """
         Initialize GWClustering with structure matrix,
         number of clusters, weights, and initial transport plan.
@@ -46,9 +54,49 @@ class GWClustering(ABC):
         """
         self.n = n
         self.k = k
+        self.value_target = value
+        self.target_type = self.define_target_type(target_type)
+        self.c2 = self.define_target_c(k, target_c)
         self.weights = self.compute_weights(weights)
-        self.c2 = self.identity_graph(k)
         self.g0 = self.compute_g0(g0)
+
+    def define_target_type(self, target_type):
+        """
+        Define target type. If not provided or not distance or adjacency, distance is chosen.
+
+        Args:
+            target_type (str): "distance" or "adjacency"
+
+        Returns:
+            str: Target type
+        """
+        if target_type in ["distance", "adjacency"]:
+            return target_type
+        warnings.warn(
+            f"Unknown target_type '{target_type}', defaulting to 'distance'.",
+            UserWarning,
+        )
+        return "distance"
+
+    def define_target_c(self, k, target_c):
+        """
+        Define target structure matrix. If not provided, use default.
+
+        Args:
+            k (int): Number of clusters/classes.
+            value (float): Replacement value for +inf entries.
+            target_c (np.ndarray or None): Target structure matrix.
+
+        Returns:
+            np.ndarray: Target structure matrix.
+        """
+        if target_c is None:
+            if self.target_type == "distance":
+                return self.target_c_distance(k, self.value_target)
+            if self.target_type == "adjacency":
+                return self.target_c_adjacency(k, self.value_target)
+        else:
+            return target_c
 
     def identity_graph(self, k):
         """
@@ -62,23 +110,33 @@ class GWClustering(ABC):
         """
         return np.identity(k)
 
-    def target_c(self, k: int, value: float = 1.0) -> np.ndarray:
+    def target_c_distance(self, k: int, value: float = 1.0) -> np.ndarray:
         """
         Create target structure: kxk matrix with same value except on the diagonal (0).
         This structural matrix represents equidistant nodes.
 
         Args:
             k (int): Number of clusters/classes.
-            value (float): Replacement value for +inf entries in the result.
+            value (float): Value outside the diagonal.
 
         Returns:
             np.ndarray: Target structure matrix (shape (k,k)).
         """
-        target_graph = nx.from_numpy_array(self.identity_graph(k))
-        target_c = nx.floyd_warshall_numpy(target_graph)
-        target_c = np.asarray(target_c, dtype=float)
-        target_c[~np.isfinite(target_c)] = value
-        return target_c
+        return np.full((k, k), value) - np.identity(k) * value
+
+    def target_c_adjacency(self, k: int, value: float = 1.0) -> np.ndarray:
+        """
+        Create target structure: kxk matrix with same value on the diagonal and 0 otherwise.
+        This structural matrix represents the adjacency matrix of k isolated nodes.
+
+        Args:
+            k (int): Number of clusters/classes.
+            value (float): Value on the diagonal.
+
+        Returns:
+            np.ndarray: Target structure matrix (shape (k,k)).
+        """
+        return np.eye(k) * value
 
     def compute_g0(self, g0):
         """
@@ -125,7 +183,9 @@ class GWClustering(ABC):
         if arr.ndim != 1:
             raise ValueError("weights must be a 1-D array-like of length n")
         if arr.shape[0] != self.n:
-            raise ValueError(f"weights length {arr.shape[0]} does not match n ({self.n})")
+            raise ValueError(
+                f"weights length {arr.shape[0]} does not match n ({self.n})"
+            )
         total = arr.sum()
         if total <= 0 or np.isnan(total):
             raise ValueError("weights must sum to a positive number")
@@ -165,12 +225,6 @@ class GWClustering(ABC):
         """
         return ot.argmax(axis=1)
 
-    @abstractmethod
-    def partitioning(self):
-        """
-        Abstract method for partitioning the graph. Must be implemented in subclasses.
-        """
-
 
 class SemiRelaxedGWClustering(GWClustering):
     """
@@ -192,6 +246,7 @@ class SemiRelaxedGWClustering(GWClustering):
         g0="kmeans",
         target_c=None,
         value=1,
+        target_type="distance",
         max_iter=100,
     ):
         """
@@ -205,63 +260,16 @@ class SemiRelaxedGWClustering(GWClustering):
             g0 (np.ndarray or str): Initial transport plan or method name.
             target_c (np.ndarray or None): Target structure matrix.
         """
-        super().__init__(n, k, weights, g0)
-        self.c2 = self.define_target_c(k, value, target_c)
+        super().__init__(
+            n=n,
+            k=k,
+            weights=weights,
+            g0=g0,
+            target_c=target_c,
+            value=value,
+            target_type=target_type,
+        )
         self.max_iter = max_iter
-        self.value = value
-
-    def define_target_c(self, k, value, target_c):
-        """
-        Define target structure matrix. If not provided, use default.
-
-        Args:
-            k (int): Number of clusters/classes.
-            value (float): Replacement value for +inf entries.
-            target_c (np.ndarray or None): Target structure matrix.
-
-        Returns:
-            np.ndarray: Target structure matrix.
-        """
-        if target_c is None:
-            return self.target_c(k, value)
-        return target_c
-
-    def update_alpha(
-        self,
-        structural_matrix,
-        attributes_matrix,
-        k,
-        ot,
-    ):
-        """
-        Compute best global alpha (weighting parameter between structure and attributes)
-        for a given transportat plan.
-
-        Args:
-            structural_matrix (np.ndarray): Structural distance matrix.
-            attributes_matrix (np.ndarray): Attributes distance matrix.
-            k (int): Number of clusters/classes.
-            ot (np.ndarray): Transport plan (nxk)
-
-        Returns:
-            np.ndarray: Target structure matrix.
-        """
-        c2 = self.target_c(k, self.value)
-        numerator = 0
-        denominator = 0
-        for i in range(self.n):
-            for j in range(self.n):
-                for l in range(k):
-                    for m in range(k):
-                        ds_ij = structural_matrix[i, j]
-                        da_ij = attributes_matrix[i, j]
-                        r_lm = c2[l, m]
-                        s_ij = ds_ij - da_ij
-                        r_ijlm = da_ij - r_lm
-                        numerator += s_ij * r_ijlm * ot[i, l] * ot[j, m]
-                denominator += s_ij**2 * self.weights[i] * self.weights[j]
-        alpha = -numerator / denominator if denominator != 0 else 0.5
-        return np.clip(alpha, 0, 1)
 
     def partitioning_simple(self, structural_matrix, embedded=False):
         """
@@ -289,75 +297,37 @@ class SemiRelaxedGWClustering(GWClustering):
         return {"ot": ot_mat, "labels": labels, "centroids": centroids}
 
     def partitioning(
-        self,
-        structural_matrix,
-        attributes_matrix,
-        embedded=False,
-        alpha=0.5,
+        self, structural_matrix, attributes_matrix, embedded=False, alpha=0.5
     ):
         """
-        Partition using semi-relaxed FGW.
+        Partition using semi-relaxed GW.
 
         Args:
-            structural_matrix (np.ndarray): Structure matrix.
-            attributes_matrix (np.ndarray): Attributes matrix.
-            alpha (bool | float): True if alpha optimized,
-                float (between 0 and 1) otherwise.
-                Default is non-alpha optimized version, with alpha = 0.5
+            g0 (np.ndarray or str): Initial transport plan or method name.
 
         Returns:
             np.ndarray: Transport plan matrix.
         """
-        default_alpha = [0.5 if isinstance(alpha, bool) and alpha is True else alpha]
-        distance_matrix = combine_alpha(
-            structural_matrix, attributes_matrix, default_alpha
-        )
+        distance_matrix = combine_alpha(structural_matrix, attributes_matrix, alpha)
         if embedded:
             distance_matrix = cdist(distance_matrix, distance_matrix)
             distance_matrix = distance_matrix / distance_matrix.max()
-
-        if isinstance(alpha, float):
-            results = self.partitioning_simple(distance_matrix)
-            results["alpha"] = alpha
-            return results
-        iter_ct = 0
-        old_ot = None
-        ot = gromov.semirelaxed_gromov_wasserstein(
+        ot_mat, log = gromov.semirelaxed_gromov_wasserstein(
             distance_matrix,
             self.c2,
             self.weights,
             symmetric=True,
-            log=False,
+            log=True,
             G0=self.g0,
         )
-        while (iter_ct < self.max_iter) & (not np.array_equal(old_ot, ot)):
-            ot = self.update_ot(ot)
-            old_ot = ot
-            k = self.update_k(ot)
-            alpha = self.update_alpha(
-                structural_matrix, attributes_matrix, k, ot
-            )
-            distance_matrix = combine_alpha(structural_matrix, attributes_matrix, alpha)
-            if embedded:
-                distance_matrix = cdist(distance_matrix, distance_matrix)
-                distance_matrix = distance_matrix / distance_matrix.max()
-            ot = gromov.semirelaxed_gromov_wasserstein(
-                distance_matrix,
-                self.target_c(k, self.value),
-                self.weights,
-                symmetric=True,
-                log=False,
-                G0=old_ot,
-            )
-            iter_ct += 1
-        labels = transport_plan_to_labels(ot)
+        srgw_dist = log["srgw_dist"]
+        labels = transport_plan_to_labels(ot_mat)
         centroids = compute_barycenters(structural_matrix, labels)
         return {
-            "ot": ot,
+            "ot": ot_mat,
             "labels": labels,
             "centroids": centroids,
-            "iter_ct": iter_ct,
-            "alpha": alpha,
+            "srgw_dist": srgw_dist,
         }
 
 
@@ -374,7 +344,17 @@ class SemiRelaxedFGWClustering(GWClustering):
         g0 (np.ndarray or str, optional): Initial transport plan or method name.
     """
 
-    def __init__(self, n, k: int, weights=None, g0="kmeans", g0_attributes=None):
+    def __init__(
+        self,
+        n,
+        k: int,
+        target_c=None,
+        value=1,
+        target_type="distance",
+        weights=None,
+        g0="kmeans",
+        g0_attributes=None,
+    ):
         """
         Initialize SemiRelaxedFGWClustering
         with attributes, structure matrix, clusters, weights, and initial transport plan.
@@ -387,7 +367,15 @@ class SemiRelaxedFGWClustering(GWClustering):
             weights (list[float] or None): Node weights.
             g0 (np.ndarray or str): Initial transport plan or method name.
         """
-        super().__init__(n, k, weights, g0)
+        super().__init__(
+            n=n,
+            k=k,
+            weights=weights,
+            g0=g0,
+            target_c=target_c,
+            value=value,
+            target_type=target_type,
+        )
         self.tasks_distances = {}
         self.tasks_barycenters = {}
         self.beta_weights = None
@@ -450,7 +438,7 @@ class SemiRelaxedFGWClustering(GWClustering):
             )
         return m
 
-    def partitioning(self, c1, c2, m, g0):
+    def partitioning(self, c1, c2, m, g0, loss):
         """
         Partition using semi-relaxed FGW.
 
@@ -468,6 +456,7 @@ class SemiRelaxedFGWClustering(GWClustering):
             c1,
             c2,
             self.weights,
+            loss_fun=loss,
             alpha=self.alpha,
             symmetric=True,
             log=True,
@@ -480,9 +469,9 @@ class SemiRelaxedFGWClustering(GWClustering):
         self,
         structural_matrix,
         attributes_matrices_dict,
-        value=1,
         iterations=10,
         medoid=False,
+        loss="square_loss",
     ):
         """
         Iteratively compute optimal transport plan and barycenters.
@@ -499,8 +488,9 @@ class SemiRelaxedFGWClustering(GWClustering):
         k_list = [self.k]
         m_list = []
         m = self.compute_m(self.g0_attributes, attributes_matrices_dict, medoid)
-        c2 = self.target_c(self.k, value)
-        ot, srfgw_dist = self.partitioning(structural_matrix, c2, m, self.g0)
+        ot, srfgw_dist = self.partitioning(
+            structural_matrix, self.c2, m, self.g0, loss=loss
+        )
         m_list.append(m)
         ot_list.append(ot)
         if self.alpha < 1:
@@ -508,8 +498,10 @@ class SemiRelaxedFGWClustering(GWClustering):
                 k = self.update_k(ot)
                 ot = self.update_ot(ot)
                 m = self.compute_m(ot, attributes_matrices_dict, medoid)
-                c2 = self.target_c(k, value)
-                ot, srfgw_dist = self.partitioning(structural_matrix, c2, m, ot)
+                c2 = self.define_target_c(k, None)
+                ot, srfgw_dist = self.partitioning(
+                    structural_matrix, c2, m, ot, loss=loss
+                )
                 if np.array_equal(ot, ot_list[-1]):
                     break
                 m_list.append(m)

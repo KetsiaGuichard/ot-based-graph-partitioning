@@ -65,11 +65,11 @@ def compute_cellules(distance_matrix, centroids):
 def centroids_to_ot(distance_matrix, centroids):
     """
     Compute transport plan from centroids by assigning each node to the closest centroid.
-    
+
     Args:
         distance_matrix (np.ndarray): Distance matrix.
         centroids (list[int]): Indices of centroids.
-        
+
     Returns:
         np.ndarray: Transport plan matrix.
     """

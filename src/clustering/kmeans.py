@@ -282,10 +282,10 @@ class EmbeddedKMeans(GraphKMeans):
     def init_alpha(self, matrix):
         """
         Initialize alpha values.
-        
+
         Args:
             matrix (np.ndarray): Distance matrix.
-        
+
         Returns:
             list: Initial alpha values.
         """
