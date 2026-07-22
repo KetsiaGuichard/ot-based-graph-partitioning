@@ -9,7 +9,7 @@ from sklearn.metrics import (
     adjusted_rand_score,
     silhouette_samples,
 )
-from src.clustering.utils import compute_kmeans_criteria, labels_to_transport_plan
+from src.otgp.clustering.utils import compute_kmeans_criteria, labels_to_transport_plan
 from .utils import prediction_to_partition, gw_loss, fgw_loss
 
 

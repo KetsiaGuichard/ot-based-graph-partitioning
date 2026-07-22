@@ -9,12 +9,12 @@ import warnings
 import numpy as np
 from scipy.spatial.distance import cdist
 from sklearn.cluster import KMeans
-from src.clustering.utils import (
+from src.otgp.clustering.utils import (
     compute_cellules,
     compute_centroids,
     compute_kmeans_criteria,
 )
-from src.distances import combine_alpha
+from src.otgp.distances import combine_alpha
 
 
 class GraphKMeans(ABC):

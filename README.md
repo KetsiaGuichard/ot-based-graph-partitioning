@@ -10,12 +10,12 @@ This repository implements simulation and clustering methods based on semi-relax
 - Example notebooks that reproduce experiments (located in top-level notebooks and methods_example.ipynb).
 
 ## Repository layout
-- `src/`: project Python package
-  - `src/simulation`: graph and attribute simulators (`graph.py`, `attributes.py`, `utils.py`)
-  - `src/clustering`: clustering algorithms and helpers (`gw_clustering.py`, `kmeans.py`, `init_strategies.py`, `utils.py`)
-  - `src/evaluation`: evaluation utilities (`utils.py`, `metrics.py`, `testing.py`)
-  - `src/distances.py`: distance computation helpers
-  - `src/shapes.py`: SBM creation with constraints 
+- `src/otgp/`: project Python package
+  - `src/otgp/simulation`: graph and attribute simulators (`graph.py`, `attributes.py`, `utils.py`)
+  - `src/otgp/clustering`: clustering algorithms and helpers (`gw_clustering.py`, `kmeans.py`, `init_strategies.py`, `utils.py`)
+  - `src/otgp/evaluation`: evaluation utilities (`utils.py`, `metrics.py`, `testing.py`)
+  - `src/otgp/distances.py`: distance computation helpers
+  - `src/otgp/shapes.py`: SBM creation with constraints 
 - `methods_example.ipynb`: example workflows
 - `simulations.ipynb`: simulations for (non)-attributed graph clustering evaluation
 - `figure_table_generation.ipynb`: generation of figures used in the article
@@ -30,3 +30,13 @@ This repository implements simulation and clustering methods based on semi-relax
   pip install -r requirements.txt
 ```
 Notable dependencies: numpy, scipy, pandas, scikit-learn, networkx, matplotlib, seaborn, POT (`ot`), dtaidistance, dtw.
+
+## Installation & Usage
+
+```
+pip install git+https://github.com/KetsiaGuichard/ot-based-graph-partitioning.git
+```
+
+```
+from otgp.shapes import MixingMatrix
+```
