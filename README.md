@@ -38,5 +38,5 @@ pip install git+https://github.com/KetsiaGuichard/ot-based-graph-partitioning.gi
 ```
 
 ```
-from otgraph.shapes import MixingMatrix
+from otgp.shapes import MixingMatrix
 ```
