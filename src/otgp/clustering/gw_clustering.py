@@ -11,14 +11,14 @@ from ot import gromov
 import numpy as np
 from scipy.spatial.distance import cdist
 
-from src.otgp.clustering.utils import (
+from .utils import (
     compute_barycenters,
     compute_m_generic,
     compute_m_medoid,
     transport_plan_to_hard,
     transport_plan_to_labels,
 )
-from src.otgp.distances import combine_alpha
+from ..distances import combine_alpha
 
 
 class GWClustering(ABC):

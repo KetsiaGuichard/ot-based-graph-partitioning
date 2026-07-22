@@ -7,7 +7,7 @@ from random import sample, seed
 import numpy as np
 from sklearn.cluster import kmeans_plusplus
 from scipy.spatial.distance import cdist
-from src.otgp.clustering.utils import centroids_to_ot
+from .utils import centroids_to_ot
 
 
 class ClusteringInit:

@@ -11,7 +11,7 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from sklearn.cluster import SpectralClustering
 
-from src.otgp.clustering import (
+from ..clustering import (
     ClusteringInit,
     FrechetKMeans,
     EmbeddedKMeans,
@@ -21,7 +21,7 @@ from src.otgp.clustering import (
     compute_m_generic,
     compute_m_medoid,
 )
-from src.otgp.distances import combine_alpha
+from ..distances import combine_alpha
 from .utils import (
     eval_df,
     distance_mixing,
