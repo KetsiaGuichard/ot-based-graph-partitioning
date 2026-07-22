@@ -11,13 +11,13 @@ import numpy as np
 import seaborn as sns
 from sklearn.metrics.pairwise import euclidean_distances
 
-from src.distances import (
+from src.otgp.distances import (
     distance_graph,
     distance_functions_dtwai,
     distance_histograms_fast,
 )
-from src.shapes import MixingMatrixInOut
-from src.simulation.attributes import SimulatedFunctionalData, SimulatedHistograms
+from src.otgp.shapes import MixingMatrixInOut
+from src.otgp.simulation.attributes import SimulatedFunctionalData, SimulatedHistograms
 from .utils import true_median_c
 
 
