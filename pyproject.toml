@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "otgp"
-version = "1.0.2"
+version = "1.0.3"
 description = "Optimal transport based graph partitioning tools"
 authors = [
     {name = "Ketsia Guichard-Sustowski"}
