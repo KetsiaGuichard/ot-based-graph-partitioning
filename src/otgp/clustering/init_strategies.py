@@ -60,7 +60,7 @@ class ClusteringInit:
             centers.append(next_center)
         return centers, centroids_to_ot(self.distance_matrix, centers)
 
-    def embedded_kmeanspp_init(self, d=None):
+    def embedded_kmeanspp_init(self, d=None, random_state=None):
         """Apply K-means ++ directly on distance matrix
 
         Args:
@@ -70,7 +70,7 @@ class ClusteringInit:
             list(int): list of k centers
             np.ndarray: transportation plan from these centers
         """
-        _, centers = kmeans_plusplus(self.distance_matrix, self.k, n_local_trials=1)
+        _, centers = kmeans_plusplus(self.distance_matrix, self.k, n_local_trials=1, random_state=random_state)
         if d is None:
             d = cdist(self.distance_matrix, self.distance_matrix)
         return centers, centroids_to_ot(d, centers)
